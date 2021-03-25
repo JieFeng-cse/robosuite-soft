@@ -101,13 +101,16 @@ import robosuite as suite
 from robosuite import load_controller_config
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
+from robosuite.environments.base import register_env
+from robosuite.environments.manipulation.lift_cloth import LiftCloth
 
 
 
 if __name__ == "__main__":
-
+    register_env(LiftCloth)
+    print("Environment registered")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--environment", type=str, default="Lift")
+    parser.add_argument("--environment", type=str, default="LiftCloth")
     parser.add_argument("--robots", nargs="+", type=str, default="Panda", help="Which robot(s) to use in the env")
     parser.add_argument("--config", type=str, default="single-arm-opposed",
                         help="Specified environment configuration if necessary")

@@ -1,5 +1,6 @@
 import copy
 from copy import deepcopy
+import numpy as np
 import xml.etree.ElementTree as ET
 
 import robosuite.utils.macros as macros
@@ -61,6 +62,11 @@ class MujocoObject(MujocoModel):
         self._contact_geoms = None
         self._visual_geoms = None
 
+        # Attributes for composite objects
+        self._count = None
+        self._composite_type = None
+        self._spacing = None
+
     def merge_assets(self, other):
         """
         Merges @other's assets in a custom logic.
@@ -118,6 +124,7 @@ class MujocoObject(MujocoModel):
         """
         # Parse element tree to get all relevant bodies, joints, actuators, and geom groups
         _elements = sort_elements(root=self.get_obj())
+        # print(ET.tostring(_elements["root_body"][0], encoding='unicode', method='xml'))
         assert len(_elements["root_body"]) == 1, "Invalid number of root bodies found for robot model. Expected 1," \
                                                  "got {}".format(len(_elements["root_body"]))
         _elements["root_body"] = _elements["root_body"][0]
@@ -129,7 +136,24 @@ class MujocoObject(MujocoModel):
         self._actuators = [e.get("name") for e in _elements.get("actuators", [])]
         self._sites = [e.get("name") for e in _elements.get("sites", [])]
         self._sensors = [e.get("name") for e in _elements.get("sensors", [])]
-        self._contact_geoms = [e.get("name") for e in _elements.get("contact_geoms", [])]
+        composite_obj = _elements["root_body"].find("./body/composite")
+        if  composite_obj is not None:
+            self._count = np.fromstring(composite_obj.get("count"), dtype=int, sep=' ')
+            self._composite_type = composite_obj.get("type")
+            self._spacing = composite_obj.get("spacing")
+            assert len(self._count) == 3, "the length of count must be 3, got: {} instead.".format(len(self._count))
+            dim = 3 - np.sum(self._count==1)
+            if dim == 1:
+                self._contact_geoms = [f'G{i}' for i in range(self._count[0])] 
+            elif dim == 2:                   
+                self._contact_geoms = [f'G{i}_{j}' for j in range(self._count[1])
+                                                   for i in range(self._count[0])]
+            elif dim == 3:
+                self._contact_geoms = [f'G{i}_{j}_{k}' for k in range(self._count[2])
+                                                       for j in range(self._count[1])
+                                                       for i in range(self._count[0])]
+        else:
+            self._contact_geoms = [e.get("name") for e in _elements.get("contact_geoms", [])]
         self._visual_geoms = [e.get("name") for e in _elements.get("visual_geoms", [])]
 
         # Add default materials if we're using domain randomization
@@ -328,10 +352,12 @@ class MujocoXMLObject(MujocoObject, MujocoXML):
 
         # Extract the appropriate private attributes for this
         self._get_object_properties()
+        # print(ET.tostring(self.root, encoding='unicode', method='xml'))
 
     def _get_object_subtree(self):
         # Parse object
         obj = copy.deepcopy(self.worldbody.find("./body/body[@name='object']"))
+        # exit(0)
         # Rename this top level object body (will have self.naming_prefix added later)
         obj.attrib["name"] = "main"
         # Get all geom_pairs in this tree
@@ -349,16 +375,19 @@ class MujocoXMLObject(MujocoObject, MujocoXML):
             if not _should_keep(element):
                 parent.remove(element)
             else:
-                g_name = element.get("name")
-                g_name = g_name if g_name is not None else f"g{i}"
-                element.set("name", g_name)
-                # Also optionally duplicate collision geoms if requested (and this is a collision geom)
-                if self.duplicate_collision_geoms and element.get("group") in {None, "0"}:
-                    parent.append(self._duplicate_visual_from_collision(element))
-                    # Also manually set the visual appearances to the original collision model
-                    element.set("rgba", array_to_string(OBJECT_COLLISION_COLOR))
-                    if element.get("material") is not None:
-                        del element.attrib["material"]
+                if parent.tag == 'composite': #composite objects' geoms do not have name attribute
+                    pass
+                else:
+                    g_name = element.get("name")
+                    g_name = g_name if g_name is not None else f"g{i}"
+                    element.set("name", g_name)
+                    # Also optionally duplicate collision geoms if requested (and this is a collision geom)
+                    if self.duplicate_collision_geoms and element.get("group") in {None, "0"}:
+                        parent.append(self._duplicate_visual_from_collision(element))
+                        # Also manually set the visual appearances to the original collision model
+                        element.set("rgba", array_to_string(OBJECT_COLLISION_COLOR))
+                        if element.get("material") is not None:
+                            del element.attrib["material"]
         # add joint(s)
         for joint_spec in self.joint_specs:
             obj.append(new_joint(**joint_spec))
@@ -367,13 +396,16 @@ class MujocoXMLObject(MujocoObject, MujocoXML):
         template["rgba"] = "1 0 0 0"
         template["name"] = "default_site"
         obj.append(ET.Element("site", attrib=template))
-
         return obj
 
     def exclude_from_prefixing(self, inp):
         """
         By default, don't exclude any from being prefixed
         """
+        # if isinstance(inp, ET.Element) and inp.find("./composite") is not None:
+        #     #if this body is next to "composite", its name should not be changed 
+        #     if inp.find("./composite").get("type") in ['cloth','rope']:
+        #         return True
         return False
 
     def _get_object_properties(self):

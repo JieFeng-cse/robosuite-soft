@@ -5,12 +5,12 @@ from mujoco_py import load_model_from_xml
 from robosuite.utils import SimulationError, XMLError, MujocoPyRenderer
 import robosuite.utils.macros as macros
 from robosuite.models.base import MujocoModel
+# from robosuite.environments.manipulation.lift_cloth import LiftCloth
 
 import numpy as np
 
 REGISTERED_ENVS = {}
-
-
+# register_env(LiftCloth)
 def register_env(target_class):
     REGISTERED_ENVS[target_class.__name__] = target_class
 
@@ -343,7 +343,6 @@ class MujocoEnv(metaclass=EnvMeta):
             if modality == "image-state" and not macros.CONCATENATE_IMAGES:
                 continue
             observations[modality] = np.concatenate(obs, axis=-1)
-
         return observations
 
     def step(self, action):
@@ -389,6 +388,7 @@ class MujocoEnv(metaclass=EnvMeta):
         self.cur_time += self.control_timestep
 
         reward, done, info = self._post_action(action)
+        observation = self._get_observations()
         return self._get_observations(), reward, done, info
 
     def _pre_action(self, action, policy_step=False):
@@ -529,6 +529,7 @@ class MujocoEnv(metaclass=EnvMeta):
             geoms_2 = [geoms_2]
         elif isinstance(geoms_2, MujocoModel):
             geoms_2 = geoms_2.contact_geoms
+        assert isinstance(self.sim.data, object)
         for contact in self.sim.data.contact[: self.sim.data.ncon]:
             # check contact geom in geoms
             c1_in_g1 = self.sim.model.geom_id2name(contact.geom1) in geoms_1

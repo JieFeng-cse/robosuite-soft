@@ -108,6 +108,25 @@ class GymWrapper(Wrapper, Env):
                 - (dict) misc information
         """
         ob_dict, reward, done, info = self.env.step(action)
+        if len(ob_dict) > 0:
+            observation = ob_dict['object-state']
+            cloth_pos = observation[:3]
+            corner1 = observation[3:6]
+            corner2 = observation[6:9]
+            corner3 = observation[9:12]
+            corner4 = observation[12:15]
+            dis1 = np.linalg.norm(corner1-cloth_pos)
+            dis2 = np.linalg.norm(corner2-cloth_pos)
+            dis3 = np.linalg.norm(corner3-cloth_pos)
+            dis4 = np.linalg.norm(corner4-cloth_pos)
+            dis_sum = dis1+dis2+dis3+dis4
+            if dis_sum < 0.34: #9*9
+                done = True
+                print("unstable stage, too close: ", dis_sum)
+                print("corner1: ", corner1)
+                print("corner2: ", corner2)
+                print("corner3: ", corner3)
+                print("corner4: ", corner4)
         return self._flatten_obs(ob_dict), reward, done, info
 
     def seed(self, seed=None):

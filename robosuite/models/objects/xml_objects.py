@@ -2,7 +2,16 @@ import numpy as np
 from robosuite.models.objects import MujocoXMLObject
 from robosuite.utils.mjcf_utils import xml_path_completion, array_to_string, find_elements
 
+#edition from Jie Feng
+class ClothObject(MujocoXMLObject):
+    """
+    Cloth object
+    """
 
+    def __init__(self,name):
+        super().__init__("/home/jonathon/robosuite/robosuite/myown/cloth_v0.xml", name=name, obj_type="collision", duplicate_collision_geoms=False)
+
+#edition from Jie Feng
 class BottleObject(MujocoXMLObject):
     """
     Bottle object

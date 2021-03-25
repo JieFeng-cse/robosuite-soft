@@ -1,6 +1,7 @@
 from robosuite.models.world import MujocoWorldBase
 from robosuite.models.robots import RobotModel
 from robosuite.models.objects import MujocoObject
+import xml.etree.ElementTree as ET
 
 
 class Task(MujocoWorldBase):
@@ -76,3 +77,4 @@ class Task(MujocoWorldBase):
             # Merge this object
             self.merge_assets(mujoco_obj)
             self.worldbody.append(mujoco_obj.get_obj())
+            # print(ET.tostring(self.worldbody, encoding='unicode', method='xml'))

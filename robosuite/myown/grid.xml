@@ -1,0 +1,22 @@
+<mujoco model="cloth">
+    <asset>
+        <texture file="../models/assets/textures/blue-wood.png" type="2d" name="clothtest"/>
+        <material name="cloth-material" reflectance="0.5" texrepeat="clothtest"/>
+    </asset>
+	<worldbody>
+     	<body>
+        	<body name="object" pos="0.15 0.15 0.8">
+                <composite type="grid" count="9 9 1" spacing="0.05">
+                    <skin material="cloth-material" inflate="0.005" subgrid="2" texcoord="true"/>
+                    <geom type="capsule" size="0.0025 0.005" density="50" friction="0.95 0.3 0.1" group="0" condim="4"/>
+                    <pin coord="0 0"/>
+                    <!-- <pin coord="8 0"/>  -->
+                    <!-- why there must be a pin -->
+                </composite>
+    		</body>
+            <site rgba="0 0 0 0" size="0.005" pos="0 0 -0.007" name="bottom_site"/>
+            <site rgba="0 0 0 0" size="0.005" pos="0 0 0.007" name="top_site"/>
+            <site rgba="0 0 0 0" size="0.005" pos="0.2 0.2 0" name="horizontal_radius_site"/>
+        </body>
+   </worldbody>
+</mujoco> 

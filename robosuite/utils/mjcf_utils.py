@@ -65,6 +65,17 @@ MUJOCO_NAMED_ATTRIBUTES = {
     "prefix", "site",
 }
 
+COMPOSITE_OBJECT_TYPES = {
+    "particle", 
+    "grid", 
+    "rope", 
+    "loop", 
+    "cloth", 
+    "box",
+    "cylinder",
+    "ellipsoid",
+}
+
 IMAGE_CONVENTION_MAPPING = {
     "opengl": 1,
     "opencv": -1,

@@ -1,6 +1,7 @@
 from robosuite.controllers import load_controller_config
 from robosuite.utils.input_utils import *
-
+from robosuite.environments.manipulation.lift_cloth import LiftCloth
+from robosuite.environments.base import register_env
 
 if __name__ == "__main__":
 
@@ -10,7 +11,8 @@ if __name__ == "__main__":
     # print welcome info
     print("Welcome to robosuite v{}!".format(suite.__version__))
     print(suite.__logo__)
-
+    register_env(LiftCloth)
+    print("Environment registered")
     # Choose environment and add it to options
     options["env_name"] = choose_environment()
 
@@ -55,12 +57,13 @@ if __name__ == "__main__":
         use_camera_obs=False,
         control_freq=20,
     )
+    print(options)
+    print(env.robots[0].name)
     env.reset()
     env.viewer.set_camera(camera_id=0)
 
     # Get action limits
     low, high = env.action_spec
-
     # do visualization
     for i in range(10000):
         action = np.random.uniform(low, high)

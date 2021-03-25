@@ -1,0 +1,21 @@
+<mujoco>
+    <asset>
+        <texture name="texcorner4" type="2d" file="../models/assets/textures/blue-wood.png"/>
+        <material name="matcorner4" texture="texcorner4"/>
+    </asset>
+  <worldbody>
+    <body>
+        <body name="object">
+        <body name="B3_5">
+        <composite prefix='' type="cloth" count="9 9 1" spacing="0.03" flatinertia="0.01">
+            <skin material="matcorner4" texcoord="true" inflate="0.005" subgrid="2"/>
+            <geom type="capsule" size="0.0075 0.005" rgba=".8 .2 .1 1" group="0"/>
+        </composite>
+        </body>
+        </body>
+        <site rgba="0 0 0 0" size="0.005" pos="0 0 -0.007" name="bottom_site"/>
+        <site rgba="0 0 0 0" size="0.005" pos="0 0 0.007" name="top_site"/>
+        <site rgba="0 0 0 0" size="0.005" pos="0.2 0.2 0" name="horizontal_radius_site"/>
+    </body>
+  </worldbody>
+</mujoco>
