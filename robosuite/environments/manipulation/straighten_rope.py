@@ -9,14 +9,12 @@ from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.grippers import GripperModel
 
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject, BottleObject, CanObject
-from robosuite.models.objects.xml_objects import ClothObject
+from robosuite.models.objects.xml_objects import RopeObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.observables import Observable, sensor
-#cloth size:0.24*0.24
 
-class LiftCloth(SingleArmEnv):
+class StraightenRope(SingleArmEnv):
     """
     This class corresponds to the lifting task for a single robot arm.
 
@@ -61,7 +59,7 @@ class LiftCloth(SingleArmEnv):
 
         use_camera_obs (bool): if True, every observation includes rendered image(s)
 
-        use_object_obs (bool): if True, include object (cloth) information in
+        use_object_obs (bool): if True, include object (rope) information in
             the observation.
 
         reward_scale (None or float): Scales the normalized reward function by the amount specified.
@@ -142,7 +140,7 @@ class LiftCloth(SingleArmEnv):
         has_renderer=False,
         has_offscreen_renderer=True,
         render_camera="frontview",
-        render_collision_mesh=False,
+        render_collision_mesh=True,
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
@@ -168,6 +166,9 @@ class LiftCloth(SingleArmEnv):
 
         # object placement initializer
         self.placement_initializer = placement_initializer
+
+        # provide accurate init pose for composite object
+        self.contacted = False
 
         super().__init__(
             robots=robots,
@@ -199,13 +200,13 @@ class LiftCloth(SingleArmEnv):
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the cloth is lifted
+            - a discrete reward of 2.25 is provided if the rope is lifted
 
         Un-normalized summed components if using reward shaping:
 
-            - Reaching: in [0, 1], to encourage the arm to reach the cloth
-            - Grasping: in {0, 0.25}, non-zero if arm is grasping the cloth
-            - Lifting: in {0, 1}, non-zero if arm has lifted the cloth
+            - Reaching: in [0, 1], to encourage the arm to reach the rope
+            - Grasping: in {0, 0.25}, non-zero if arm is grasping the rope
+            - Lifting: in {0, 1}, non-zero if arm has lifted the rope
 
         The sparse reward only consists of the lifting component.
 
@@ -220,46 +221,41 @@ class LiftCloth(SingleArmEnv):
         """
         # print("reward")
         reward = 0.
-        # print(self.sim.data.contact[: self.sim.data.ncon])
-        # print(dir(self.sim.data))
-        # print(self.sim.data.xfrc_applied['B0_0'])
-        # sparse completion reward
-        cloth_element_pos = self._get_element_pos()
-        if self._check_success(cloth_element_pos):
-            print("the real success!!!!!!!!!!!!!!!!!!!!!!!!")
-            reward = 2.25
+        rope_element_pos = self._get_element_pos()
+        if not self.contacted:
+            self.check_contacted()
+            self.init_pos = self._get_element_pos()
+        if self._check_success(rope_element_pos):
+            if not np.all(action==0.):
+                print("the real success!!!!!!!!!!!!!!!!!!!!!!!!")
+                reward = 2.25
         # use a shaping reward
         elif self.reward_shaping:
             # reaching reward
-            # cloth_pos = self.sim.data.body_xpos[self.cloth_body_id]
             gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
-            gripper_site_pos= np.repeat(gripper_site_pos.reshape(1,3), cloth_element_pos.shape[0], axis=0)
-            dist = np.min(np.sqrt(np.sum((gripper_site_pos - cloth_element_pos)**2, axis=1)))
-            reaching_reward = 0.4*(1 - np.tanh(10.0 * dist))
+            gripper_site_pos= np.repeat(gripper_site_pos.reshape(1,3), rope_element_pos.shape[0], axis=0)
+            dist = np.min(np.sqrt(np.sum((gripper_site_pos - rope_element_pos)**2, axis=1)))
+            reaching_reward = 0.6*(1 - np.tanh(10.0 * dist))
             # print("reaching reward: ", reaching_reward)
             reward += reaching_reward
             if not np.all(action==0):
-                cloth_pos_change = np.mean(np.sqrt(np.sum((self.init_pos[:,:2] - cloth_element_pos[:,:2])**2, axis=1)))
-                if cloth_pos_change > 0.2:
+                rope_pos_change = np.mean(np.sqrt(np.sum((self.init_pos[:,:2] - rope_element_pos[:,:2])**2, axis=1)))
+                if rope_pos_change > 0.3:
                     print("too much movement")
                     reward -= 0.5
+            
             # grasping reward
-            if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cloth):
+            if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.rope):
                 grasp_reward = 0.25
-                grasped_geoms = self.get_contacts(self.robots[0].gripper)
-                grasped_geom_ids = [self.sim.model.geom_name2id(name) for name in grasped_geoms]
-                grasped_geom_z_pos = [self.sim.data.geom_xpos[id][2] for id in grasped_geom_ids]
-                table_height = self.model.mujoco_arena.table_offset[2]
-                average_height = np.mean(grasped_geom_z_pos)
-                grasped_height = average_height - table_height
-                rising_reward = np.tanh(20.0 * grasped_height)
-                grasp_reward += rising_reward
-                if grasped_height > 0.02:
-                    print("nearly successful!")
-                    grasp_reward += 0.3
                 reward += grasp_reward
-                # print("grasp reward: ", grasp_reward)
 
+            #straighten reward
+            init_end_dis = np.linalg.norm(self.init_pos[0] - self.init_pos[-1])
+            straighten_reward = np.tanh((self.rope_end_dis - init_end_dis)*10)
+            # print(straighten_reward)
+            if straighten_reward < 0:
+                straighten_reward *= 0.5
+            reward += straighten_reward                
 
         # Scale reward if requested
         if self.reward_scale is not None:
@@ -272,7 +268,6 @@ class LiftCloth(SingleArmEnv):
         Loads an xml model, puts it in self.model
         """
         super()._load_model()
-        # print("load")
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
@@ -288,33 +283,17 @@ class LiftCloth(SingleArmEnv):
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
 
-        # initialize objects of interest
-        tex_attrib = {
-            "type": "cloth",
-        }
-        mat_attrib = {
-            "texrepeat": "1 1",
-            "specular": "0.4",
-            "shininess": "0.1",
-        }
-        redwood = CustomMaterial(
-            texture="WoodRed",
-            tex_name="redwood",
-            mat_name="redwood_mat",
-            tex_attrib=tex_attrib,
-            mat_attrib=mat_attrib,
-        )
-        self.cloth = ClothObject("cloth")
+        self.rope = RopeObject("rope")
 
         # Create placement initializer
         if self.placement_initializer is not None:
             self.placement_initializer.reset()
-            self.placement_initializer.add_objects(self.cloth)
+            self.placement_initializer.add_objects(self.rope)
         else:
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
-                mujoco_objects=self.cloth,
-                x_range=[0.10, 0.14],
+                mujoco_objects=self.rope,
+                x_range=[0.05, 0.10],
                 y_range=[-0.03, 0.03],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
@@ -327,7 +306,7 @@ class LiftCloth(SingleArmEnv):
         self.model = ManipulationTask(
             mujoco_arena=mujoco_arena,
             mujoco_robots=[robot.robot_model for robot in self.robots], 
-            mujoco_objects=self.cloth,
+            mujoco_objects=self.rope,
         )
 
     def _setup_references(self):
@@ -339,33 +318,39 @@ class LiftCloth(SingleArmEnv):
         # print("setup_references")
         super()._setup_references()
         # Additional object references from this env
-        self.cloth_body_id = self.sim.model.body_name2id(self.cloth.root_body)
+        self.rope_body_id = self.sim.model.body_name2id(self.rope.root_body)
 
         # clear previous xfrc_force
 
-    def _initialize_cloth_pos(self):
+    def _initialize_rope_pos(self):
         """
-        Initialize the pose of cloth object
+        Initialize the pose of rope object
         """
-        
-        self._get_element_ids()
+        # print("initialize pos")
+        self._get_element_geom_ids()
+        self._get_element_body_ids()
         self.init_pos = self._get_element_pos()
-        cloth_size = [[0, self.cloth._count[0]-1], [0, self.cloth._count[1]-1]]
-        corner_names = [self.cloth.naming_prefix + f'B{i}_{j}' for i in cloth_size[0]
-                                                          for j in cloth_size[1]]
-        self.corner_id = [self.sim.model.body_name2id(corner_names[i]) for i in range(4)]
-        mid1_id = self.sim.model.body_name2id(self.cloth.naming_prefix + 'B3_4')
-        mid2_id = self.sim.model.body_name2id(self.cloth.naming_prefix + 'B4_4')
+        nodes_id = [self.element_body_ids[i] for i in range(0, self.rope._count[0], 3)]
+        mid_id = self.sim.model.body_name2id(self.rope.naming_prefix + f'B{int((self.rope._count[0])/2)}')
 
-        # Hold the cloth in position
-        self.sim.data.xfrc_applied[mid1_id, :3] = np.random.uniform(-2,0,size=3)
-        self.sim.data.xfrc_applied[mid2_id, :3] = np.random.uniform(-2,0,size=3)
-
-        # Force the corners move randomly
-        self.sim.data.xfrc_applied[self.corner_id, :3] = np.random.uniform(-1.5,1.5,size=(len(self.corner_id),3))
+        # Force the ends move randomly
+        random_horizontal_force = np.concatenate([np.random.uniform(-0.8, 0.8, size=(len(nodes_id),2)), np.zeros((len(nodes_id),1))], axis=1)
+        self.sim.data.xfrc_applied[nodes_id, :3] = random_horizontal_force
+        
         _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
         self.sim.data.xfrc_applied[:, :3] = np.zeros((3,))
+        _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
+        # _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
+        # print("after two steps")
+        # Sample from the placement initializer for all objects
+        object_placements = self.placement_initializer.sample()
+
+        # Loop through all objects and reset their positions
+        for obj_pos, obj_quat, obj in object_placements.values():
+            self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+        _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
         self.init_pos = self._get_element_pos()
+        self.contacted = False
 
     def _setup_observables(self):
         """
@@ -383,26 +368,26 @@ class LiftCloth(SingleArmEnv):
             pf = self.robots[0].robot_model.naming_prefix
             modality = "object"
             
-            # cloth-related observables
+            # rope-related observables
             @sensor(modality=modality)
-            def corner_pos(obs_cache):
-                corner_positions = [np.array(self.sim.data.body_xpos[id]) for id in self.corner_id]
-                return np.concatenate(corner_positions)
+            def rope_nodes_pos(obs_cache):
+                node_positions = [np.array(self.sim.data.geom_xpos[self.element_geom_ids[i]]) 
+                                  for i in range(0, self.rope._count[0], 5)]
+                end_pose = np.array(self.sim.data.geom_xpos[self.element_geom_ids[-1]])
+                if not self.rope._count[0]-1 in range(0, self.rope._count[0], 5):
+                    node_positions.append(end_pose)
+                return np.concatenate(node_positions)
 
             @sensor(modality=modality)
-            def cloth_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos[self.cloth_body_id])
+            def rope_pos(obs_cache):
+                return np.array(self.sim.data.body_xpos[self.rope_body_id])
 
-            # @sensor(modality=modality)
-            # def cloth_quat(obs_cache):
-            #     return convert_quat(np.array(self.sim.data.body_xquat[self.cloth_body_id]), to="xyzw")
+            @sensor(modality=modality)
+            def gripper_to_rope_pos(obs_cache):
+                return obs_cache[f"{pf}eef_pos"] - obs_cache["rope_pos"] if \
+                    f"{pf}eef_pos" in obs_cache and "rope_pos" in obs_cache else np.zeros(3)
 
-            # @sensor(modality=modality)
-            # def gripper_to_cloth_pos(obs_cache):
-            #     return obs_cache[f"{pf}eef_pos"] - obs_cache["cloth_pos"] if \
-            #         f"{pf}eef_pos" in obs_cache and "cloth_pos" in obs_cache else np.zeros(3)
-
-            sensors = [cloth_pos, corner_pos]
+            sensors = [rope_nodes_pos, gripper_to_rope_pos] #TODO test if the second observation works
             names = [s.__name__ for s in sensors]
 
             # Create observables
@@ -424,18 +409,17 @@ class LiftCloth(SingleArmEnv):
         # Reset all object positions using initializer sampler if we're not directly loading from an xml
         if not self.deterministic_reset:
 
-            # Sample from the placement initializer for all objects
-            object_placements = self.placement_initializer.sample()
-
-            # Loop through all objects and reset their positions
-            for obj_pos, obj_quat, obj in object_placements.values():
-                self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
-        self._initialize_cloth_pos()
-        # print("reward", np.array(self.sim.data.body_xpos[self.cloth_body_id]))
-
+            self._initialize_rope_pos()
+        
+            while self.rope_end_dis > self.rope._composite_shape[0] - 0.1 or \
+                  np.any(self.init_pos[:,-1]<self.model.mujoco_arena.table_offset[2]):
+                # print("re-initialize")
+                self._initialize_rope_pos()
+        # print(self.init_pos[:,-1])
+    
     def visualize(self, vis_settings):
         """
-        In addition to super call, visualize gripper site proportional to the distance to the cloth.
+        In addition to super call, visualize gripper site proportional to the distance to the rope.
 
         Args:
             vis_settings (dict): Visualization keywords mapped to T/F, determining whether that specific
@@ -445,39 +429,55 @@ class LiftCloth(SingleArmEnv):
         # Run superclass method first
         super().visualize(vis_settings=vis_settings)
         # print("visual")
-        # Color the gripper visualization site according to its distance to the cloth
+        # Color the gripper visualization site according to its distance to the rope
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cloth)
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.rope)
 
-    def _get_element_ids(self):
+    def _get_element_geom_ids(self):
         """
-        Get the ids of cloth elements
+        Get the ids of rope elements
         """
-        pf = self.cloth.naming_prefix
-        self.element_ids = [[self.sim.model.geom_name2id(f'{pf}G{i}_{j}')
-                        for j in range(9)]
-                        for i in range(9)]
-    
+        pf = self.rope.naming_prefix
+        self.element_geom_ids = [self.sim.model.geom_name2id(f'{pf}G{i}')
+                            for i in range(self.rope._count[0])]
+  
+    def _get_element_body_ids(self):
+        """
+        Get the ids of rope elements
+        """
+        pf = self.rope.naming_prefix
+        self.element_body_ids = [self.sim.model.body_name2id(f'{pf}B{i}')
+                            for i in range(self.rope._count[0])]
+                         
     def _get_element_pos(self):
         """
-        Get the global positions of cloth elements
+        Get the global positions of rope elements
         """
-        element_pos = np.array([[self.sim.data.geom_xpos[self.element_ids[i][j]]
-                                 for j in range(9)]
-                                 for i in range(9)], dtype='float32') 
+        element_pos = np.array([self.sim.data.geom_xpos[self.element_geom_ids[i]]
+                                 for i in range(self.rope._count[0])], dtype='float32') 
         return element_pos.reshape(-1,3)       
 
     def _check_success(self, object_pose):
         """
-        Check if cloth has been lifted.
+        Check if rope has been straighten.
 
         Returns:
-            bool: True if cloth has been lifted
+            bool: True if rope has been straighten
         """
-        # cloth_height = self.sim.data.body_xpos[self.cloth_body_id][2]
-        cloth_height = np.mean(object_pose[:,2])
-        table_height = self.model.mujoco_arena.table_offset[2]
+        self.rope_end_pos = [object_pose[0, :2], object_pose[-1, :2]]
+        self.rope_end_dis = np.linalg.norm(self.rope_end_pos[0]-self.rope_end_pos[1])
+        threshold = 0.02
+        # print(self.rope_end_dis)
+        return self.rope_end_dis + threshold >= self.rope._composite_shape[0]
 
-        # cloth is higher than the table top above a margin
-        return cloth_height > table_height + 0.04#0.8
+    def check_contacted(self):
+        """
+        check if rope has been contacted by the gripper
+        """
+        gripper_contacts = self.get_contacts(self.robots[0].gripper)
+        pf = self.rope.naming_prefix
+        for contact in gripper_contacts:
+            match = re.search(pf+"[G]\d+$", contact)
+            if match != None:
+                self.contacted = True
     

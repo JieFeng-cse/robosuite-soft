@@ -66,6 +66,7 @@ class MujocoObject(MujocoModel):
         self._count = None
         self._composite_type = None
         self._spacing = None
+        self._composite_shape = None
 
     def merge_assets(self, other):
         """
@@ -124,7 +125,7 @@ class MujocoObject(MujocoModel):
         """
         # Parse element tree to get all relevant bodies, joints, actuators, and geom groups
         _elements = sort_elements(root=self.get_obj())
-        # print(ET.tostring(_elements["root_body"][0], encoding='unicode', method='xml'))
+        # print(ET.tostring(self.get_obj(), encoding='unicode', method='xml'))
         assert len(_elements["root_body"]) == 1, "Invalid number of root bodies found for robot model. Expected 1," \
                                                  "got {}".format(len(_elements["root_body"]))
         _elements["root_body"] = _elements["root_body"][0]
@@ -140,9 +141,10 @@ class MujocoObject(MujocoModel):
         if  composite_obj is not None:
             self._count = np.fromstring(composite_obj.get("count"), dtype=int, sep=' ')
             self._composite_type = composite_obj.get("type")
-            self._spacing = composite_obj.get("spacing")
+            self._spacing = float(composite_obj.get("spacing"))
             assert len(self._count) == 3, "the length of count must be 3, got: {} instead.".format(len(self._count))
             dim = 3 - np.sum(self._count==1)
+            self._composite_shape = [self._spacing * (self._count[i] - 1) for i in range(dim)]
             if dim == 1:
                 self._contact_geoms = [f'G{i}' for i in range(self._count[0])] 
             elif dim == 2:                   

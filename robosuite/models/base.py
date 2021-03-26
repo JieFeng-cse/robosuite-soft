@@ -270,6 +270,7 @@ class MujocoModel(object):
         if type(names) is str:
             return self.naming_prefix + names if not self.exclude_from_prefixing(names) else names
         elif type(names) is list:
+            names = list(filter(None, names))  #TODO Jie: I just added it, did not test its impact
             return [self.naming_prefix + name if not self.exclude_from_prefixing(name) else name for name in names]
         elif type(names) is dict:
             names = names.copy()

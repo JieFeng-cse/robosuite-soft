@@ -1,16 +1,16 @@
 <mujoco>
     <asset>
-        <texture name="texcorner4" type="2d" file="../models/assets/textures/blue-wood.png"/>
-        <material name="matcorner4" texture="texcorner4"/>
-    </asset>
+    <mesh file="meshes/bread.stl" name="bread_mesh" scale="0.8 0.8 0.8"/>
+    <texture file="../textures/bread.png" type="2d" name="tex-bread" />
+    <material name="bread" reflectance="0.7" texrepeat="15 15" texture="tex-bread" texuniform="true"/>
+  </asset>
   <worldbody>
     <body>
         <body name="object">
-        <body name="B3_5">
-        <composite prefix='' type="cloth" count="9 9 1" spacing="0.03" flatinertia="0.01">
+        <body name="B10">
+        <composite prefix='' type="rope" count="25 1 1" spacing="0.02" offset="0 0 2">
             <joint kind="main" damping="0.002"/>
-            <skin material="matcorner4" texcoord="true" inflate="0.005" subgrid="2"/>
-            <geom type="capsule" size="0.0075 0.005" rgba=".8 .2 .1 1" group="0"/>
+            <geom type="capsule" size=".008 .01" rgba=" .8 .2 .1 1" group="0"/>
         </composite>
         </body>
         </body>

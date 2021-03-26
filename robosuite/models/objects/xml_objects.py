@@ -9,7 +9,18 @@ class ClothObject(MujocoXMLObject):
     """
 
     def __init__(self,name):
-        super().__init__("/home/jonathon/robosuite/robosuite/myown/cloth_v0.xml", name=name, obj_type="collision", duplicate_collision_geoms=False)
+        super().__init__("/home/jonathon/robosuite/robosuite/myown/cloth_v0.xml", 
+                         name=name, obj_type="collision", duplicate_collision_geoms=False)
+
+
+class RopeObject(MujocoXMLObject):
+    """
+    Rope object
+    """
+
+    def __init__(self,name):
+        super().__init__(xml_path_completion("objects/rope_v0.xml"), name=name, 
+                         obj_type="collision", duplicate_collision_geoms=True)
 
 #edition from Jie Feng
 class BottleObject(MujocoXMLObject):
