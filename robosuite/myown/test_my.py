@@ -10,7 +10,7 @@ import time
 # create environment instance
 register_env(StraightenRope)
 env = suite.make(
-    env_name='StraightenRope', 
+    env_name='LiftCloth', 
     robots='Panda', 
     controller_configs=load_controller_config(default_controller='OSC_POSE'),
     has_renderer=True,

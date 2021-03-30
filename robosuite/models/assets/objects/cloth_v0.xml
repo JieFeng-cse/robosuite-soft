@@ -1,6 +1,6 @@
 <mujoco>
     <asset>
-        <texture name="texcorner4" type="2d" file="../models/assets/textures/blue-wood.png"/>
+        <texture name="texcorner4" type="2d" file="../textures/blue-wood.png"/>
         <material name="matcorner4" texture="texcorner4"/>
     </asset>
   <worldbody>
@@ -8,6 +8,7 @@
         <body name="object">
         <body name="B3_5">
         <composite prefix='' type="cloth" count="9 9 1" spacing="0.03" flatinertia="0.01">
+            <joint kind="main" damping="0.002"/>
             <skin material="matcorner4" texcoord="true" inflate="0.005" subgrid="2"/>
             <geom type="capsule" size="0.0075 0.005" rgba=".8 .2 .1 1" group="0"/>
         </composite>

@@ -169,6 +169,7 @@ class StraightenRope(SingleArmEnv):
 
         # provide accurate init pose for composite object
         self.contacted = False
+        self.step_num = 0
 
         super().__init__(
             robots=robots,
@@ -222,45 +223,60 @@ class StraightenRope(SingleArmEnv):
         # print("reward")
         reward = 0.
         rope_element_pos = self._get_element_pos()
-        if not self.contacted:
-            self.check_contacted()
+        if np.all(action==0.):
             self.init_pos = self._get_element_pos()
-        if self._check_success(rope_element_pos):
-            if not np.all(action==0.):
-                print("the real success!!!!!!!!!!!!!!!!!!!!!!!!")
-                reward = 2.25
-        # use a shaping reward
-        elif self.reward_shaping:
-            # reaching reward
-            gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
-            gripper_site_pos= np.repeat(gripper_site_pos.reshape(1,3), rope_element_pos.shape[0], axis=0)
-            dist = np.min(np.sqrt(np.sum((gripper_site_pos - rope_element_pos)**2, axis=1)))
-            reaching_reward = 0.6*(1 - np.tanh(10.0 * dist))
-            # print("reaching reward: ", reaching_reward)
-            reward += reaching_reward
-            if not np.all(action==0):
-                rope_pos_change = np.mean(np.sqrt(np.sum((self.init_pos[:,:2] - rope_element_pos[:,:2])**2, axis=1)))
-                if rope_pos_change > 0.3:
-                    print("too much movement")
-                    reward -= 0.5
-            
-            # grasping reward
-            if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.rope):
-                grasp_reward = 0.25
-                reward += grasp_reward
+            self.last_pose = self.init_pos
+            self._check_success(rope_element_pos)
+        else:
+            self.step_num +=1 
+            if not self.contacted:
+                self.check_contacted()
+                self.init_pos = self._get_element_pos()
+            if self._check_success(rope_element_pos):
+                if not np.all(action==0.):
+                    print("the real success!!!!!!!!!!!!!!!!!!!!!!!!")
+                    reward = 2.25
+            # use a shaping reward
+            elif self.reward_shaping:
+                # reaching reward
+                # print(self.init_pos)
+                gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
+                gripper_site_pos= np.repeat(gripper_site_pos.reshape(1,3), rope_element_pos.shape[0], axis=0)
+                dist = np.min(np.sqrt(np.sum((gripper_site_pos - rope_element_pos)**2, axis=1)))
+                reaching_reward = (1 - np.tanh(10.0 * dist))
+                # print("reaching reward: ", reaching_reward)
+                reward += reaching_reward
+                if not np.all(action==0):
+                    rope_pos_change = np.mean(np.sqrt(np.sum((self.init_pos[:,:2] - rope_element_pos[:,:2])**2, axis=1)))
+                    if rope_pos_change > 0.3:
+                        print("too much movement")
+                        reward -= 0.2
+                
+                # grasping reward
+                if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.rope):
+                    grasp_reward = 0.25
+                    reward += grasp_reward
 
-            #straighten reward
-            init_end_dis = np.linalg.norm(self.init_pos[0] - self.init_pos[-1])
-            straighten_reward = np.tanh((self.rope_end_dis - init_end_dis)*10)
-            # print(straighten_reward)
-            if straighten_reward < 0:
-                straighten_reward *= 0.5
-            reward += straighten_reward                
+                #straighten reward
+                init_end_dis = np.linalg.norm(self.init_pos[0] - self.init_pos[-1])
+                # last_end_dis = np.linalg.norm(self.last_pose[0] - self.last_pose[-1])
+                # straighten_reward = np.tanh((self.rope_end_dis - last_end_dis)*100)
+                straighten_reward = (self.rope_end_dis - init_end_dis)*10
+                # straighten_reward_scale = self.rope._composite_shape[0] - init_end_dis
+                # straighten_reward = -np.tanh((self.rope._composite_shape[0]-self.rope_end_dis)/straighten_reward_scale-1)
+                # straighten_reward = -np.abs(self.rope._composite_shape[0]-self.rope_end_dis)
+                if not self.step_num % 50:
+                    print("reward:", straighten_reward, ", last dis: ", init_end_dis, ", now dis: ", self.rope_end_dis)
+                #     print("reward:", straighten_reward, ", init dis: ", straighten_reward_scale, ", now dis: ", self.rope._composite_shape[0]-self.rope_end_dis)
+                # print(straighten_reward)
+                # if straighten_reward < 0:
+                #     straighten_reward *= 0.5
+                reward += straighten_reward                
 
         # Scale reward if requested
         if self.reward_scale is not None:
             reward *= self.reward_scale / 2.25
-
+        self.last_pose = self._get_element_pos()
         return reward
 
     def _load_model(self):
@@ -348,8 +364,10 @@ class StraightenRope(SingleArmEnv):
         # Loop through all objects and reset their positions
         for obj_pos, obj_quat, obj in object_placements.values():
             self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
-        _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
+        for i in range(4):
+            _, _, _, _ = self.step(np.zeros(self.robots[0].action_dim))
         self.init_pos = self._get_element_pos()
+        self.last_pose = self.init_pos
         self.contacted = False
 
     def _setup_observables(self):

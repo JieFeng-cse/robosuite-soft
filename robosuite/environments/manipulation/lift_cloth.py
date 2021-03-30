@@ -240,9 +240,9 @@ class LiftCloth(SingleArmEnv):
             reward += reaching_reward
             if not np.all(action==0):
                 cloth_pos_change = np.mean(np.sqrt(np.sum((self.init_pos[:,:2] - cloth_element_pos[:,:2])**2, axis=1)))
-                if cloth_pos_change > 0.2:
+                if cloth_pos_change > 0.3:
                     print("too much movement")
-                    reward -= 0.5
+                    reward -= 0.1
             # grasping reward
             if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cloth):
                 grasp_reward = 0.25
@@ -252,11 +252,12 @@ class LiftCloth(SingleArmEnv):
                 table_height = self.model.mujoco_arena.table_offset[2]
                 average_height = np.mean(grasped_geom_z_pos)
                 grasped_height = average_height - table_height
-                rising_reward = np.tanh(20.0 * grasped_height)
-                grasp_reward += rising_reward
-                if grasped_height > 0.02:
+                rising_reward = 0.5*np.tanh(grasped_height*10)
+                if grasped_height > 0.05:
                     print("nearly successful!")
                     grasp_reward += 0.3
+                    rising_reward = np.tanh(5.0 * grasped_height)
+                grasp_reward += rising_reward
                 reward += grasp_reward
                 # print("grasp reward: ", grasp_reward)
 
@@ -479,5 +480,5 @@ class LiftCloth(SingleArmEnv):
         table_height = self.model.mujoco_arena.table_offset[2]
 
         # cloth is higher than the table top above a margin
-        return cloth_height > table_height + 0.04#0.8
+        return cloth_height > table_height + 0.1#0.8
     
